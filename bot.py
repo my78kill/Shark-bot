@@ -134,11 +134,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chat = query.message.chat.id
     user = query.from_user
-
-    await query.answer()
+    data = query.data
 
     # JOIN BUTTON
-    if query.data == "join":
+    if data == "join":
 
         if chat not in games:
 
@@ -156,15 +155,18 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "msg": query.message.message_id
             }
 
+            await query.answer("You are leader now!", show_alert=True)
             return
 
         if user.id not in leader_queue[chat]:
             leader_queue[chat].append(user.id)
             await query.message.reply_text(f"{user.first_name} joined leader queue!")
 
+        await query.answer()
         return
 
     if chat not in games:
+        await query.answer()
         return
 
     game = games[chat]
@@ -174,25 +176,18 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # SEE WORD
-    if query.data == "see":
-
-        await query.answer(
-            f"Word: {game['word']}",
-            show_alert=True
-        )
+    if data == "see":
+        await query.answer(f"Word: {game['word']}", show_alert=True)
+        return
 
     # CHANGE WORD
-    elif query.data == "change":
-
+    if data == "change":
         game["word"] = random.choice(words)
-
-        await query.answer(
-            "Word changed!",
-            show_alert=True
-        )
+        await query.answer("Word changed!", show_alert=True)
+        return
 
     # DROP LEAD
-    elif query.data == "drop":
+    if data == "drop":
 
         name = game["leader_name"]
 
@@ -201,20 +196,45 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-        keyboard = [[
-            InlineKeyboardButton(
-                "🎮 I want to be a leader",
-                callback_data="join"
+        # AUTO NEXT LEADER FROM QUEUE
+        if leader_queue[chat]:
+
+            new = leader_queue[chat].pop(0)
+            member = await context.bot.get_chat_member(chat, new)
+
+            word = random.choice(words)
+
+            msg = await context.bot.send_message(
+                chat,
+                f"🦈 Shark Game\n\n🎤 {member.user.first_name} is explaining the word!",
+                reply_markup=game_keyboard()
             )
-        ]]
 
-        await context.bot.send_message(
-            chat,
-            f"🦈 Shark Game\n\n{name} refused to lead!",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+            games[chat] = {
+                "leader": new,
+                "leader_name": member.user.first_name,
+                "word": word,
+                "msg": msg.message_id
+            }
 
-        del games[chat]
+        else:
+
+            keyboard = [[
+                InlineKeyboardButton(
+                    "🎮 I want to be a leader",
+                    callback_data="join"
+                )
+            ]]
+
+            await context.bot.send_message(
+                chat,
+                f"🦈 Shark Game\n\n{name} refused to lead!",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+            del games[chat]
+
+        await query.answer()
 
 
 # NEXT LEADER
@@ -222,7 +242,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def next_leader(context, chat):
 
     if not leader_queue[chat]:
-        await context.bot.send_message(chat, "No leader in queue.")
         return
 
     new = leader_queue[chat].pop(0)
