@@ -1,10 +1,8 @@
 import sys
 import types
 
-# Fix for Python 3.13+ (imghdr removed)
 imghdr = types.ModuleType("imghdr")
 sys.modules["imghdr"] = imghdr
-
 
 import random
 import os
