@@ -269,4 +269,4 @@ def start_bot():
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, guess))
 
-    app.run_polling(close_loop=False)
+    app.run_polling()
