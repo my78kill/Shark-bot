@@ -6,12 +6,12 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "🦈 Shark Game Bot is running!"
+    return "🦈 Shark Game Bot Running!"
 
-def run_bot():
+def run():
     start_bot()
 
-threading.Thread(target=run_bot).start()
+threading.Thread(target=run).start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
