@@ -27,6 +27,19 @@ def load_words():
 words = load_words()
 
 
+def game_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("👁 See word", callback_data="see"),
+            InlineKeyboardButton("🔄 Change word", callback_data="change")
+        ],
+        [
+            InlineKeyboardButton("🎮 I want to be a leader", callback_data="join"),
+            InlineKeyboardButton("❌ Drop lead", callback_data="drop")
+        ]
+    ])
+
+
 # START
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -80,13 +93,11 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🔤 Word Guess
 
-There are two roles: leader and participants.
+Leader gets a secret word and explains it.
 
-The leader gets a random secret word and describes it without saying the word.
+Participants must guess the word.
 
-Participants must guess the word and type it in the group chat.
-
-🏆 The first correct guess becomes the next leader.
+🏆 First correct guess becomes next leader.
 """)
 
 
@@ -103,30 +114,17 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     word = random.choice(words)
 
+    msg = await update.message.reply_text(
+        f"🦈 Shark Game\n\n🎤 {user.first_name} is explaining the word!",
+        reply_markup=game_keyboard()
+    )
+
     games[chat] = {
         "leader": user.id,
         "leader_name": user.first_name,
         "word": word,
-        "msg": None
+        "msg": msg.message_id
     }
-
-    keyboard = [
-        [
-            InlineKeyboardButton("👁 See word", callback_data="see"),
-            InlineKeyboardButton("🔄 Change word", callback_data="change")
-        ],
-        [
-            InlineKeyboardButton("🎮 I want to be a leader", callback_data="join"),
-            InlineKeyboardButton("❌ Drop lead", callback_data="drop")
-        ]
-    ]
-
-    msg = await update.message.reply_text(
-        f"🦈 Shark Game\n\n🎤 {user.first_name} is explaining the word!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-    games[chat]["msg"] = msg.message_id
 
 
 # BUTTONS
@@ -137,35 +135,51 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = query.message.chat.id
     user = query.from_user
 
-    if chat not in games:
-        await query.answer()
-        return
+    await query.answer()
 
-    game = games[chat]
-
-    # JOIN QUEUE
+    # JOIN BUTTON
     if query.data == "join":
+
+        if chat not in games:
+
+            word = random.choice(words)
+
+            await query.message.edit_text(
+                f"🦈 Shark Game\n\n🎤 {user.first_name} is explaining the word!",
+                reply_markup=game_keyboard()
+            )
+
+            games[chat] = {
+                "leader": user.id,
+                "leader_name": user.first_name,
+                "word": word,
+                "msg": query.message.message_id
+            }
+
+            return
 
         if user.id not in leader_queue[chat]:
             leader_queue[chat].append(user.id)
             await query.message.reply_text(f"{user.first_name} joined leader queue!")
 
-        await query.answer()
         return
 
-    # ONLY LEADER
+    if chat not in games:
+        return
+
+    game = games[chat]
+
     if user.id != game["leader"]:
         await query.answer("Only leader can use this", show_alert=True)
         return
 
-    # SEE WORD POPUP
+    # SEE WORD
     if query.data == "see":
 
         await query.answer(
             f"Word: {game['word']}",
             show_alert=True
         )
-        return
 
     # CHANGE WORD
     elif query.data == "change":
@@ -176,7 +190,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Word changed!",
             show_alert=True
         )
-        return
 
     # DROP LEAD
     elif query.data == "drop":
@@ -202,38 +215,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         del games[chat]
-        await query.answer()
 
 
-# GUESS
-
-async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    chat = update.effective_chat.id
-
-    if chat not in games:
-        return
-
-    game = games[chat]
-    user = update.effective_user
-
-    if user.id == game["leader"]:
-        return
-
-    text = update.message.text.lower().strip()
-
-    if text == game["word"]:
-
-        ranking[chat][user.first_name] += 1
-
-        await update.message.reply_text(
-            f"🎉 Correct!\n\n🏆 {user.first_name} guessed the word!"
-        )
-
-        leader_queue[chat].insert(0, user.id)
-
-        await next_leader(context, chat)
-
+# NEXT LEADER
 
 async def next_leader(context, chat):
 
@@ -252,8 +236,50 @@ async def next_leader(context, chat):
     await context.bot.edit_message_text(
         chat_id=chat,
         message_id=games[chat]["msg"],
-        text=f"🦈 Shark Game\n\n🎤 {member.user.first_name} is explaining the word!"
+        text=f"🦈 Shark Game\n\n🎤 {member.user.first_name} is explaining the word!",
+        reply_markup=game_keyboard()
     )
+
+
+# GUESS
+
+async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    chat = update.effective_chat.id
+
+    if chat not in games:
+        return
+
+    game = games[chat]
+    user = update.effective_user
+    text = update.message.text.lower().strip()
+
+    # leader reveal word
+    if user.id == game["leader"]:
+
+        if game["word"] in text:
+
+            await update.message.reply_text(
+                f"🛑 Game stopped!\n\n"
+                f"{user.first_name} [-1 💵] revealed the word: {game['word']}"
+            )
+
+            del games[chat]
+
+        return
+
+    # guess check
+    if text == game["word"]:
+
+        ranking[chat][user.first_name] += 1
+
+        await update.message.reply_text(
+            f"🎉 Correct!\n\n🏆 {user.first_name} guessed the word!"
+        )
+
+        leader_queue[chat].insert(0, user.id)
+
+        await next_leader(context, chat)
 
 
 # RANKING
