@@ -188,9 +188,15 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # CHANGE WORD
     if data == "change":
-        game["word"] = random.choice(words)
-        await query.answer("Word changed!", show_alert=True)
-        return
+
+    game["word"] = random.choice(words)
+
+    await query.answer(
+        f"Word: {game['word']}",
+        show_alert=True
+    )
+
+    return
 
     # DROP LEAD
     if data == "drop":
