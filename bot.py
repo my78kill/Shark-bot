@@ -40,6 +40,12 @@ def game_keyboard():
     ])
 
 
+def leader_button():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎮 I want to be a leader", callback_data="join")]
+    ])
+
+
 # START
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -196,7 +202,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-        # AUTO NEXT LEADER FROM QUEUE
         if leader_queue[chat]:
 
             new = leader_queue[chat].pop(0)
@@ -219,17 +224,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         else:
 
-            keyboard = [[
-                InlineKeyboardButton(
-                    "🎮 I want to be a leader",
-                    callback_data="join"
-                )
-            ]]
-
             await context.bot.send_message(
                 chat,
                 f"🦈 Shark Game\n\n{name} refused to lead!",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                reply_markup=leader_button()
             )
 
             del games[chat]
@@ -273,21 +271,23 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text.lower().strip()
 
-    # leader reveal word
     if user.id == game["leader"]:
 
         if game["word"] in text:
 
+            mention = f'<a href="tg://user?id={user.id}">{user.first_name}</a>'
+
             await update.message.reply_text(
                 f"🛑 Game stopped!\n\n"
-                f"{user.first_name} [-1 💵] revealed the word: {game['word']}"
+                f"{mention} [-1 💵] revealed the word: {game['word']}",
+                reply_markup=leader_button(),
+                parse_mode="HTML"
             )
 
             del games[chat]
 
         return
 
-    # guess check
     if text == game["word"]:
 
         ranking[chat][user.first_name] += 1
